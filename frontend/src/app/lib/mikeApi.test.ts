@@ -18,6 +18,7 @@ import {
     createWorkflow,
     deleteAccount,
     deleteAllChats,
+    deleteAllMemories,
     deleteAllProjects,
     deleteAllTabularReviews,
     deleteChat,
@@ -47,6 +48,8 @@ import {
     getAuditHistory,
     getPanelDocument,
     getDocument,
+    getDocumentFile,
+    getDocumentFileUrl,
     getDocumentUrl,
     getLibrary,
     getLibraryLevels,
@@ -60,6 +63,7 @@ import {
     getOpenRouterModels,
     getVercelModels,
     getProject,
+    getProjectMemory,
     getProjectDirectoryLevel,
     getProjectFilterOptions,
     getProjectPeople,
@@ -69,6 +73,7 @@ import {
     getTabularReviewAccess,
     getTabularReviewPeople,
     getUserExportStatus,
+    getUserMemory,
     getUserProfile,
     getWorkflow,
     getWorkflowPeople,
@@ -144,6 +149,8 @@ import {
     searchProjectDirectory,
     searchLibraryDocuments,
     setMcpToolEnabled,
+    setProjectMemoryEnabled,
+    setUserMemoryEnabled,
     shareWorkflow,
     startMcpConnectorOAuth,
     startUserExport,
@@ -158,6 +165,7 @@ import {
     unhideWorkflow,
     updateMcpConnector,
     updateProject,
+    updateProjectMemory,
     updateChatModel,
     updateChatReasoningLevel,
     updateLastSelectedChatSettings,
@@ -168,6 +176,7 @@ import {
     updateUserProfile,
     updateWorkflow,
     updateQuickAction,
+    updateUserMemory,
     deleteQuickAction,
     importWorkflowAddon,
     listQuickActions,
@@ -1679,6 +1688,41 @@ describe("tabular cell operations", () => {
 });
 
 describe("query and payload defaults", () => {
+    it("getDocumentFile appends version_id only when a version is requested", async () => {
+        expect(getDocumentFileUrl("d 1")).toBe(
+            "/api/single-documents/d%201/file",
+        );
+        expect(getDocumentFileUrl("d 1", "v 1")).toBe(
+            "/api/single-documents/d%201/file?version_id=v%201",
+        );
+
+        fetchMock
+            .mockResolvedValueOnce(
+                new Response("current", {
+                    status: 200,
+                    headers: {
+                        "content-disposition":
+                            'attachment; filename="current.docx"',
+                    },
+                }),
+            )
+            .mockResolvedValueOnce(
+                new Response("selected", { status: 200 }),
+            );
+
+        const current = await getDocumentFile("d1");
+        expect(lastFetchCall().url).toBe("/api/single-documents/d1/file");
+        expect(current.filename).toBe("current.docx");
+        expect(await current.blob.text()).toBe("current");
+
+        const selected = await getDocumentFile("d 1", "v 1");
+        expect(lastFetchCall().url).toBe(
+            "/api/single-documents/d%201/file?version_id=v%201",
+        );
+        expect(selected.filename).toBeNull();
+        expect(await selected.blob.text()).toBe("selected");
+    });
+
     it("getDocumentUrl appends version_id only when a version is requested", async () => {
         fetchMock.mockImplementation(() =>
             Promise.resolve(
@@ -1867,6 +1911,20 @@ describe("thin endpoint wrappers", () => {
             },
         },
         {
+            name: "createProject (with project memory disabled)",
+            call: () =>
+                createProject(
+                    "No-memory matter",
+                    undefined,
+                    undefined,
+                    undefined,
+                    false,
+                ),
+            url: "/projects",
+            method: "POST",
+            body: { name: "No-memory matter", memory_enabled: false },
+        },
+        {
             name: "deleteAccount",
             call: () => deleteAccount(),
             url: "/user/account",
@@ -1883,6 +1941,50 @@ describe("thin endpoint wrappers", () => {
             call: () => deleteAllTabularReviews(),
             url: "/user/tabular-reviews",
             method: "DELETE",
+        },
+        {
+            name: "deleteAllMemories",
+            call: () => deleteAllMemories(),
+            url: "/user/memories",
+            method: "DELETE",
+        },
+        {
+            name: "getUserMemory",
+            call: () => getUserMemory(),
+            url: "/user/memory",
+        },
+        {
+            name: "updateUserMemory",
+            call: () => updateUserMemory("# Preferences", 3),
+            url: "/user/memory",
+            method: "PUT",
+            body: { content: "# Preferences", expected_revision: 3 },
+        },
+        {
+            name: "setUserMemoryEnabled",
+            call: () => setUserMemoryEnabled(false),
+            url: "/user/memory/settings",
+            method: "PATCH",
+            body: { enabled: false },
+        },
+        {
+            name: "getProjectMemory",
+            call: () => getProjectMemory("project/1"),
+            url: "/projects/project%2F1/memory",
+        },
+        {
+            name: "updateProjectMemory",
+            call: () => updateProjectMemory("project/1", "# Matter", 7),
+            url: "/projects/project%2F1/memory",
+            method: "PUT",
+            body: { content: "# Matter", expected_revision: 7 },
+        },
+        {
+            name: "setProjectMemoryEnabled",
+            call: () => setProjectMemoryEnabled("project/1", false),
+            url: "/projects/project%2F1/memory/settings",
+            method: "PATCH",
+            body: { enabled: false },
         },
         {
             name: "updateUserProfile",
